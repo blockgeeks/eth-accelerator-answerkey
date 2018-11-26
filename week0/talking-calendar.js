@@ -1,33 +1,40 @@
 var talkingCalendar = function(date) {
-  var dateArray = date.split("/");
-  var months = ["January", "February", "March", "April", "May", "June", "July",
-                "August",  "September", "October", "November", "December"]
 
-  var year = dateArray[0];
-  var month = months[Number(dateArray[1]) - 1]
-  var day;
+  var year  = date.slice(0,4);
+  var month = date.slice(5,7) - 1;
+  var day   = parseInt(date.slice(8));
 
-  if (Number(dateArray[2]) > 3) {
-    day = dateArray[2] + "th";
-  } else {
-    switch (Number(dateArray[2])) {
+  var monthName = ["January", "February", "March", "April", "May", "June",
+                    "July", "August", "September", "October", "November",
+                    "December"];
+
+  var suffix;
+
+  switch (day) {
       case 1:
-        day = "1st";
+      case 21:
+      case 31:
+        suffix = 'st';
         break;
       case 2:
-        day = "2nd";
+      case 22:
+        suffix = 'nd';
         break;
       case 3:
-        day = "3rd";
+      case 23:
+        suffix = 'rd';
         break;
-    }
+      default:
+        suffix = 'th';
+        break;
   }
 
-  var fullDate = month + " " + day + ", " + year;
+  dateString = monthName[month] + " " + day + suffix +", " + year;
 
-  return fullDate;
+  return dateString;
 };
 
+console.log("\nTask 3: Talking Calendars\n");
 console.log(talkingCalendar("2017/12/02"));
 console.log(talkingCalendar("2007/11/11"));
 console.log(talkingCalendar("1987/08/24"));
