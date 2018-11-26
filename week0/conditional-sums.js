@@ -1,21 +1,19 @@
 var conditionalSum = function(values, condition) {
+  let result = 0;
 
-  var sum = 0;
-
-  if (condition == "even") {
-    for (i = 0; i < values.length; i++) {
-      if (values[i] % 2 == 0) {
-        sum += values[i]
-      }
-    }
+  if (condition === "odd") {
+    remainder = 1;
   } else {
-    for (i = 0; i < values.length; i++) {
-      if (values[i] % 2 != 0) {
-        sum += values[i]
-      }
+    remainder = 0;
+  }
+
+  for (i = 0; i < values.length; i++) {
+    if ((values[i] % 2) === remainder) {
+      result += values[i];
     }
   }
-  return sum;
+
+  return result;
 };
 
 console.log(conditionalSum([1, 2, 3, 4, 5], "even"));
