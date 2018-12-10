@@ -3,111 +3,148 @@ pragma solidity ^0.4.24;
 import "./IERC20.sol";
 import "./SafeMath.sol";
 
+contract Crowdsale {
+    using SafeMath for uint256;
 
-/**
- * @title Standard ERC20 token
- *
- * @dev Implementation of the basic standard token.
- * https://github.com/ethereum/EIPs/blob/master/EIPS/eip-20.md
- * Originally based on code by FirstBlood: https://github.com/Firstbloodio/token/blob/master/smart_contract/FirstBloodToken.sol
- */
-contract ERC20 is IERC20 {
-  using SafeMath for uint256;
+    uint256 private cap; // maximum amount of ether to be raised
+    uint256 private weiRaised; // current amount of wei raised
 
-  mapping (address => uint256) internal _balances;
+    uint256 private rate; // price in wei per smallest unit of token (e.g. 1 wei = 10 smallet unit of a token)
+    address private wallet; // wallet to hold the ethers
+    IERC20 private token; // address of erc20 tokens
 
-  mapping (address => mapping (address => uint256)) internal _allowed;
+   /**
+    * Event for token purchase logging
+    * @param purchaser who paid for the tokens
+    * @param beneficiary who got the tokens
+    * @param value weis paid for purchase
+    * @param amount amount of tokens purchased
+    */
+    event TokensPurchased(
+        address indexed purchaser,
+        address indexed beneficiary,
+        uint256 value,
+        uint256 amount
+    );
 
-  uint256 internal _totalSupply;
+    // -----------------------------------------
+    // External functions (DO NOT change the interface!)
+    // -----------------------------------------
+   /**
+    * @param _rate Number of token units a buyer gets per wei
+    * @dev The rate is the conversion between wei and the smallest and indivisible token unit.
+    * @param _wallet Address where collected funds will be forwarded to
+    * @param _token Address of the token being sold
+    * @param _cap Max amount of wei to be contributed
+    */
+    constructor(uint256 _rate, address _wallet, IERC20 _token, uint256 _cap) public {
+        require(_rate > 0);
+        require(_wallet != address(0));
+        require(_token != address(0));
+        require(_cap > 0);
 
-  /**
-  * @dev Total number of tokens in existence
-  */
-  function totalSupply() public view returns (uint256) {
-    return _totalSupply;
-  }
+        rate = _rate;
+        wallet = _wallet;
+        token = _token;
+        cap = _cap;
+    }
 
-  /**
-  * @dev Gets the balance of the specified address.
-  * @param owner The address to query the balance of.
-  * @return An uint256 representing the amount owned by the passed address.
-  */
-  function balanceOf(address owner) public view returns (uint256) {
-    return _balances[owner];
-  }
+    /**
+    * @dev Fallback function for users to send ether directly to contract address
+    */
+    function() external payable {
+        buyTokens(msg.sender);
+    }
 
-  /**
-   * @dev Function to check the amount of tokens that an owner allowed to a spender.
-   * @param owner address The address which owns the funds.
-   * @param spender address The address which will spend the funds.
-   * @return A uint256 specifying the amount of tokens still available for the spender.
-   */
-  function allowance(
-    address owner,
-    address spender
-   )
-    public
-    view
-    returns (uint256)
-  {
-    return _allowed[owner][spender];
-  }
+    function buyTokens(address beneficiary) public payable {
+        // Below are some general steps that should be done.
+        // You need to decide the right order to do them in.
+        //  - Validate any conditions
+        //  - Calculate number of tokens
+        //  - Update any states
+        //  - Transfer tokens and emit event
+        //  - Forward funds to wallet
 
-  /**
-  * @dev Transfer token for a specified address
-  * @param to The address to transfer to.
-  * @param value The amount to be transferred.
-  */
-  function transfer(address to, uint256 value) public returns (bool) {
-    require(value <= _balances[msg.sender]);
-    require(to != address(0));
+        uint256 weiAmount = msg.value;
+        _preValidatePurchase(beneficiary, weiAmount);
 
-    _balances[msg.sender] = _balances[msg.sender].sub(value);
-    _balances[to] = _balances[to].add(value);
-    emit Transfer(msg.sender, to, value);
-    return true;
-  }
+        // calculate token amount to be created
+        uint256 tokens = _getTokenAmount(weiAmount);
 
-  /**
-   * @dev Approve the passed address to spend the specified amount of tokens on behalf of msg.sender.
-   * Beware that changing an allowance with this method brings the risk that someone may use both the old
-   * and the new allowance by unfortunate transaction ordering. One possible solution to mitigate this
-   * race condition is to first reduce the spender's allowance to 0 and set the desired value afterwards:
-   * https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
-   * @param spender The address which will spend the funds.
-   * @param value The amount of tokens to be spent.
-   */
-  function approve(address spender, uint256 value) public returns (bool) {
-    require(spender != address(0));
+        // update state
+        weiRaised = weiRaised.add(weiAmount);
 
-    _allowed[msg.sender][spender] = value;
-    emit Approval(msg.sender, spender, value);
-    return true;
-  }
+        _processPurchase(beneficiary, tokens);
+        emit TokensPurchased(
+            msg.sender,
+            beneficiary,
+            weiAmount,
+            tokens
+        );
 
-  /**
-   * @dev Transfer tokens from one address to another
-   * @param from address The address which you want to send tokens from
-   * @param to address The address which you want to transfer to
-   * @param value uint256 the amount of tokens to be transferred
-   */
-  function transferFrom(
-    address from,
-    address to,
-    uint256 value
-  )
-    public
-    returns (bool)
-  {
-    require(value <= _balances[from]);
-    require(value <= _allowed[from][msg.sender]);
-    require(to != address(0));
+        _forwardFunds();
+    }
 
-    _balances[from] = _balances[from].sub(value);
-    _balances[to] = _balances[to].add(value);
-    _allowed[from][msg.sender] = _allowed[from][msg.sender].sub(value);
-    emit Transfer(from, to, value);
-    return true;
-  }
+    /**
+    * @dev Checks whether the cap has been reached.
+    * @return Whether the cap was reached
+    */
+    function capReached() public view returns (bool) {
+        return weiRaised >= cap;
+    }
+
+    // -----------------------------------------
+    // Internal functions (you can write any other internal helper functions here)
+    // -----------------------------------------
+    /**
+    * @dev Validation of an incoming purchase. Use require statements to revert state when conditions are not met. Use `super` in contracts that inherit from Crowdsale to extend their validations.
+    * Example from CappedCrowdsale.sol's _preValidatePurchase method:
+    *   super._preValidatePurchase(beneficiary, weiAmount);
+    *   require(weiRaised().add(weiAmount) <= cap);
+    * @param beneficiary Address performing the token purchase
+    * @param weiAmount Value in wei involved in the purchase
+    */
+    function _preValidatePurchase(
+        address beneficiary,
+        uint256 weiAmount
+    )
+        view internal
+    {
+        require(beneficiary != address(0));
+        require(weiAmount != 0);
+        require(weiRaised.add(weiAmount) <= cap);
+    }
+
+    /**
+    * @dev Source of tokens. Override this method to modify the way in which the crowdsale ultimately gets and sends its tokens.
+    * @param beneficiary Address performing the token purchase
+    * @param tokenAmount Number of tokens to be emitted
+    */
+    function _processPurchase(
+        address beneficiary,
+        uint256 tokenAmount
+    )
+        internal
+    {
+        token.transfer(beneficiary, tokenAmount);
+    }
+
+    /**
+    * @dev Override to extend the way in which ether is converted to tokens.
+    * @param weiAmount Value in wei to be converted into tokens
+    * @return Number of tokens that can be purchased with the specified _weiAmount
+    */
+    function _getTokenAmount(uint256 weiAmount)
+        internal view returns (uint256)
+    {
+        return weiAmount.mul(rate);
+    }
+
+    /**
+    * @dev Determines how ETH is stored/forwarded on purchases.
+    */
+    function _forwardFunds() internal {
+        wallet.transfer(msg.value);
+    }
 
 }
